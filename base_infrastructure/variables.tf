@@ -5,19 +5,19 @@ variable "aws_region_code" {
 }
 
 variable "azA_name" {
-  description = "Name of Availability Zone A in this region"
+  description = "Sets name of Availability Zone A in this region."
   type        = string
   default     = "us-west-2a"
 }
 
 variable "azB_name" {
-  description = "Name of Availability Zone B in this region"
+  description = "Sets name of Availability Zone B in this region."
   type        = string
   default     = "us-west-2b"
 }
 
 variable "azC_name" {
-  description = "Name of Availability Zone C in this region"
+  description = "Sets name of Availability Zone C in this region."
   type        = string
   default     = "us-west-2c"
 }
