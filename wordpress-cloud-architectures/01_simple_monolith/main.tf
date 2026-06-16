@@ -31,6 +31,10 @@ module "vpc" {
   ]
 }
 
+module "wp-instance-role" {
+  source = "${path.root}/../common_modules/iam/wp-instance-role"
+}
+
 # Security group for monolithic EC2 Instance
 resource "aws_security_group" "wordpress-sg" {
   name        = "wp01-web"
@@ -56,6 +60,11 @@ resource "aws_vpc_security_group_egress_rule" "allow-all" {
   ip_protocol       = "-1"
 }
 
+resource "aws_iam_instance_profile" "wp-instance-profile" {
+  name = "wp-instance-profile"
+  role = module.wp-instance-role.wp-instance-role-name
+}
+
 # Launch template for creating monolithic EC2 Instance
 resource "aws_launch_template" "wordpress" {
   name                   = "wordpress"
@@ -76,7 +85,7 @@ resource "aws_launch_template" "wordpress" {
   }
 
   iam_instance_profile {
-    name = "wp-test-role-ssm"
+    name = aws_iam_instance_profile.wp-instance-profile.name
   }
 
   metadata_options {
