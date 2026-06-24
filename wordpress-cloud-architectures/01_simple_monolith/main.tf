@@ -9,7 +9,7 @@ data "aws_ssm_parameter" "al2023-ami" {
 # Base VPC setup
 module "vpc" {
   source   = "${path.root}/../common_modules/vpc"
-  vpc_name = "WP01 (monolith)"
+  vpc_name = "WP_VPC"
   vpc_cidr = "10.21.0.0/16"
   azA_subnet_cidrs = [
     "10.21.0.0/20",
@@ -37,7 +37,7 @@ module "wp-instance-role" {
 
 # Security group for monolithic EC2 Instance
 resource "aws_security_group" "wordpress-sg" {
-  name        = "wp01-web"
+  name        = "wp-web"
   description = "Allow HTTP from all"
   vpc_id      = module.vpc.vpc-id
 
@@ -95,7 +95,7 @@ resource "aws_launch_template" "wordpress" {
 }
 
 # The instance, for WordPress web server, DB, and media
-resource "aws_instance" "wp01-monolith" {
+resource "aws_instance" "wp-instance" {
   subnet_id = module.vpc.subnet-webA-id
 
   launch_template {
