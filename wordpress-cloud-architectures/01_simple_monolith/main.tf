@@ -2,11 +2,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-data "aws_ssm_parameter" "al2023_ami" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-}
-
-# Base VPC setup
 module "vpc" {
   source   = "${path.root}/../common_modules/vpc"
   name_tag = "WP_VPC"
@@ -29,10 +24,6 @@ module "vpc" {
     "10.21.160.0/20",
     "10.21.176.0/20"
   ]
-}
-
-module "wp-instance-role" {
-  source = "${path.root}/../common_modules/iam/wp-instance-role"
 }
 
 # Security group for monolithic EC2 Instance
@@ -60,12 +51,20 @@ resource "aws_vpc_security_group_egress_rule" "allow_all" {
   ip_protocol       = "-1"
 }
 
+module "wp-instance-role" {
+  source = "${path.root}/../common_modules/iam/wp-instance-role"
+}
+
 resource "aws_iam_instance_profile" "wp" {
   name = "wp-instance-profile"
   role = module.wp-instance-role.name
 }
 
-# Launch template for creating monolithic EC2 Instance
+data "aws_ssm_parameter" "al2023_ami" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}
+
+# Creates monolithic EC2 Instance (web server, DB, and media)
 resource "aws_launch_template" "wp" {
   name                   = "wordpress"
   instance_type          = "t3.nano"
@@ -94,7 +93,6 @@ resource "aws_launch_template" "wp" {
   }
 }
 
-# The instance, for WordPress web server, DB, and media
 resource "aws_instance" "wp" {
   subnet_id = module.vpc.subnet_id_web_A
 

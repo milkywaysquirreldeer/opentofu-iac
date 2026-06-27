@@ -1,8 +1,3 @@
-# Retrieves info about the available AZs in the Region being used
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = "true"
@@ -11,13 +6,10 @@ resource "aws_vpc" "main" {
   }
 }
 
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.main.id
-  tags = {
-    Name = "igw"
-  }
+# Retrieves info about the available AZs in the Region being used
+data "aws_availability_zones" "available" {
+  state = "available"
 }
-
 
 # Subnets
 ## in Availability Zone A
@@ -134,7 +126,13 @@ resource "aws_subnet" "web_C" {
   }
 }
 
-# Route table for public subnets
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "igw"
+  }
+}
+
 resource "aws_route_table" "public_subnets" {
   vpc_id = aws_vpc.main.id
   route {
@@ -146,7 +144,6 @@ resource "aws_route_table" "public_subnets" {
   }
 }
 
-# Route table associations for public subnets
 resource "aws_route_table_association" "web_A" {
   subnet_id      = aws_subnet.web_A.id
   route_table_id = aws_route_table.public_subnets.id
