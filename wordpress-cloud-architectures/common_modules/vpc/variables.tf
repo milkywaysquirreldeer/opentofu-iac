@@ -53,7 +53,7 @@ variable "azC_subnet_cidrs" {
 }
 
 # Other variables
-variable "vpc_name" {
+variable "name_tag" {
   description = "Defines the Name tag assigned to the VPC."
   type = string
   default = ""

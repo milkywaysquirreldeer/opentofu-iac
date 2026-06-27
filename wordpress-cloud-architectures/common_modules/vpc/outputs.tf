@@ -1,15 +1,15 @@
-output "vpc-id" {
-  value = aws_vpc.vpc.id
+output "id" {
+  value = aws_vpc.main.id
 }
 
-output "subnet-webA-id" {
-  value = aws_subnet.web-A.id
+output "subnet_id_web_A" {
+  value = aws_subnet.web_A.id
 }
 
-output "subnet-webB-id" {
-  value = aws_subnet.web-B.id
+output "subnet_id_web_B" {
+  value = aws_subnet.web_B.id
 }
 
-output "subnet-webC-id" {
-  value = aws_subnet.web-C.id
+output "subnet_id_web_C" {
+  value = aws_subnet.web_C.id
 }

@@ -3,16 +3,16 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-resource "aws_vpc" "vpc" {
+resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = "true"
   tags = {
-    Name = var.vpc_name
+    Name = var.name_tag
   }
 }
 
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.vpc.id
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
   tags = {
     Name = "igw"
   }
@@ -21,125 +21,125 @@ resource "aws_internet_gateway" "igw" {
 
 # Subnets
 ## in Availability Zone A
-resource "aws_subnet" "reserved-A" {
+resource "aws_subnet" "reserved_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[0]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-reserved-A"
   }
 }
 
-resource "aws_subnet" "db-A" {
+resource "aws_subnet" "db_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[1]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-db-A"
   }
 }
 
-resource "aws_subnet" "app-A" {
+resource "aws_subnet" "app_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[2]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-app-A"
   }
 }
 
-resource "aws_subnet" "web-A" {
+resource "aws_subnet" "web_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[3]
   map_public_ip_on_launch = true
-  vpc_id                  = aws_vpc.vpc.id
+  vpc_id                  = aws_vpc.main.id
   tags = {
     Name = "sn-web-A"
   }
 }
 
 ## in Availability Zone B
-resource "aws_subnet" "reserved-B" {
+resource "aws_subnet" "reserved_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[0]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-reserved-B"
   }
 }
 
-resource "aws_subnet" "db-B" {
+resource "aws_subnet" "db_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[1]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-db-B"
   }
 }
 
-resource "aws_subnet" "app-B" {
+resource "aws_subnet" "app_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[2]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-app-B"
   }
 }
 
-resource "aws_subnet" "web-B" {
+resource "aws_subnet" "web_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[3]
   map_public_ip_on_launch = true
-  vpc_id                  = aws_vpc.vpc.id
+  vpc_id                  = aws_vpc.main.id
   tags = {
     Name = "sn-web-B"
   }
 }
 
 ## in Availability Zone C
-resource "aws_subnet" "reserved-C" {
+resource "aws_subnet" "reserved_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block        = var.azC_subnet_cidrs[0]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-reserved-C"
   }
 }
 
-resource "aws_subnet" "db-C" {
+resource "aws_subnet" "db_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block        = var.azC_subnet_cidrs[1]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-db-C"
   }
 }
 
-resource "aws_subnet" "app-C" {
+resource "aws_subnet" "app_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block        = var.azC_subnet_cidrs[2]
-  vpc_id            = aws_vpc.vpc.id
+  vpc_id            = aws_vpc.main.id
   tags = {
     Name = "sn-app-C"
   }
 }
 
-resource "aws_subnet" "web-C" {
+resource "aws_subnet" "web_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block              = var.azC_subnet_cidrs[3]
   map_public_ip_on_launch = true
-  vpc_id                  = aws_vpc.vpc.id
+  vpc_id                  = aws_vpc.main.id
   tags = {
     Name = "sn-web-C"
   }
 }
 
 # Route table for public subnets
-resource "aws_route_table" "rt-public-subnets" {
-  vpc_id = aws_vpc.vpc.id
+resource "aws_route_table" "public_subnets" {
+  vpc_id = aws_vpc.main.id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
+    gateway_id = aws_internet_gateway.gw.id
   }
   tags = {
     Name = "rtb-public-subnets"
@@ -147,17 +147,17 @@ resource "aws_route_table" "rt-public-subnets" {
 }
 
 # Route table associations for public subnets
-resource "aws_route_table_association" "rta-web-A" {
-  subnet_id      = aws_subnet.web-A.id
-  route_table_id = aws_route_table.rt-public-subnets.id
+resource "aws_route_table_association" "web_A" {
+  subnet_id      = aws_subnet.web_A.id
+  route_table_id = aws_route_table.public_subnets.id
 }
 
-resource "aws_route_table_association" "rta-web-B" {
-  subnet_id      = aws_subnet.web-B.id
-  route_table_id = aws_route_table.rt-public-subnets.id
+resource "aws_route_table_association" "web_B" {
+  subnet_id      = aws_subnet.web_B.id
+  route_table_id = aws_route_table.public_subnets.id
 }
 
-resource "aws_route_table_association" "rta-web-C" {
-  subnet_id      = aws_subnet.web-C.id
-  route_table_id = aws_route_table.rt-public-subnets.id
+resource "aws_route_table_association" "web_C" {
+  subnet_id      = aws_subnet.web_C.id
+  route_table_id = aws_route_table.public_subnets.id
 }
