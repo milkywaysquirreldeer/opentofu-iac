@@ -3,54 +3,83 @@ provider "aws" {
 }
 
 module "vpc" {
-  source   = "${path.root}/../common_modules/vpc"
-  name_tag = "WP_VPC"
-  vpc_cidr = "10.21.0.0/16"
-  azA_subnet_cidrs = [
-    "10.21.0.0/20",
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "v6.6.1"
+
+  name                    = "WP_VPC"
+  azs                     = ["us-west-2a", "us-west-2b", "us-west-2c"]
+  cidr                    = "10.21.0.0/16"
+  map_public_ip_on_launch = true
+
+  private_subnets = [
     "10.21.16.0/20",
     "10.21.32.0/20",
-    "10.21.48.0/20"
-  ]
-
-  azB_subnet_cidrs = [
-    "10.21.64.0/20",
+    "10.21.48.0/20",
     "10.21.80.0/20",
     "10.21.96.0/20",
-    "10.21.112.0/20"
-  ]
-
-  azC_subnet_cidrs = [
-    "10.21.128.0/20",
+    "10.21.112.0/20",
     "10.21.144.0/20",
     "10.21.160.0/20",
     "10.21.176.0/20"
   ]
-}
 
-# Security group for monolithic EC2 Instance
-resource "aws_security_group" "wp_web" {
-  name        = "wp-web"
-  description = "Allow HTTP from all"
-  vpc_id      = module.vpc.id
+  private_subnet_names = [
+    "WP_VPC-reserved-us-west-2a",
+    "WP_VPC-reserved-us-west-2b",
+    "WP_VPC-reserved-us-west-2c",
+    "WP_VPC-db-us-west-2a",
+    "WP_VPC-db-us-west-2b",
+    "WP_VPC-db-us-west-2c",
+    "WP_VPC-app-us-west-2a",
+    "WP_VPC-app-us-west-2b",
+    "WP_VPC-app-us-west-2c"
+  ]
+
+  public_subnets = ["10.21.0.0/20", "10.21.64.0/20", "10.21.128.0/20"]
+
+  public_subnet_names = [
+    "WP_VPC-web-us-west-2a",
+    "WP_VPC-web-us-west-2b",
+    "WP_VPC-web-us-west-2c"
+  ]
 
   tags = {
-    Name = "WP_WEB"
+    Terraform = "true"
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "allow_http" {
-  security_group_id = aws_security_group.wp_web.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 80
-  ip_protocol       = "tcp"
-  to_port           = 80
-}
+module "wp_web_security_group" {
+  source      = "terraform-aws-modules/security-group/aws"
+  version     = "v6.0.0"
+  name        = "WP_WEB"
+  description = "Allow HTTP from all"
+  vpc_id      = module.vpc.vpc_id
 
-resource "aws_vpc_security_group_egress_rule" "allow_all" {
-  security_group_id = aws_security_group.wp_web.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
+  ingress_rules = {
+    http-ALL = {
+      from_port   = 80
+      ip_protocol = "tcp"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "HTTP from ALL"
+    }
+    all-SG = {
+      ip_protocol                  = "-1"
+      referenced_security_group_id = "self"
+      description                  = "All traffic from members of this SG"
+    }
+  }
+
+  egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+  }
+
+  tags = {
+    Name      = "WP_WEB"
+    Terraform = "true"
+  }
 }
 
 module "wp-instance-role" {
@@ -73,7 +102,7 @@ resource "aws_launch_template" "wp" {
   image_id               = data.aws_ssm_parameter.al2023_ami.insecure_value
   ebs_optimized          = true
   user_data              = filebase64("${path.root}/user-data/wp-bootstrap.sh")
-  vpc_security_group_ids = [aws_security_group.wp_web.id]
+  vpc_security_group_ids = [module.wp_web_security_group.id]
 
   block_device_mappings {
     device_name = "/dev/xvda"
@@ -96,13 +125,14 @@ resource "aws_launch_template" "wp" {
 }
 
 resource "aws_instance" "wp" {
-  subnet_id = module.vpc.subnet_id_web_A
+  subnet_id = module.vpc.public_subnets[0]
 
   launch_template {
     id = aws_launch_template.wp.id
   }
 
   tags = {
-    Name = "WordPress"
+    Name      = "WordPress"
+    Terraform = "true"
   }
 }
