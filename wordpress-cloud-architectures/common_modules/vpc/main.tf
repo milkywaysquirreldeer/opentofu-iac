@@ -1,6 +1,7 @@
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = "true"
+
   tags = {
     Name = var.name_tag
   }
@@ -17,6 +18,7 @@ resource "aws_subnet" "reserved_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[0]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-reserved-A"
   }
@@ -26,6 +28,7 @@ resource "aws_subnet" "db_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[1]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-db-A"
   }
@@ -35,6 +38,7 @@ resource "aws_subnet" "app_A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = var.azA_subnet_cidrs[2]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-app-A"
   }
@@ -45,6 +49,7 @@ resource "aws_subnet" "web_A" {
   cidr_block        = var.azA_subnet_cidrs[3]
   map_public_ip_on_launch = true
   vpc_id                  = aws_vpc.main.id
+
   tags = {
     Name = "sn-web-A"
   }
@@ -55,6 +60,7 @@ resource "aws_subnet" "reserved_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[0]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-reserved-B"
   }
@@ -64,6 +70,7 @@ resource "aws_subnet" "db_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[1]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-db-B"
   }
@@ -73,6 +80,7 @@ resource "aws_subnet" "app_B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = var.azB_subnet_cidrs[2]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-app-B"
   }
@@ -83,6 +91,7 @@ resource "aws_subnet" "web_B" {
   cidr_block        = var.azB_subnet_cidrs[3]
   map_public_ip_on_launch = true
   vpc_id                  = aws_vpc.main.id
+
   tags = {
     Name = "sn-web-B"
   }
@@ -93,6 +102,7 @@ resource "aws_subnet" "reserved_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block        = var.azC_subnet_cidrs[0]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-reserved-C"
   }
@@ -102,6 +112,7 @@ resource "aws_subnet" "db_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block        = var.azC_subnet_cidrs[1]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-db-C"
   }
@@ -111,6 +122,7 @@ resource "aws_subnet" "app_C" {
   availability_zone = data.aws_availability_zones.available.names[2]
   cidr_block        = var.azC_subnet_cidrs[2]
   vpc_id            = aws_vpc.main.id
+
   tags = {
     Name = "sn-app-C"
   }
@@ -121,6 +133,7 @@ resource "aws_subnet" "web_C" {
   cidr_block              = var.azC_subnet_cidrs[3]
   map_public_ip_on_launch = true
   vpc_id                  = aws_vpc.main.id
+
   tags = {
     Name = "sn-web-C"
   }
@@ -128,6 +141,7 @@ resource "aws_subnet" "web_C" {
 
 resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
+
   tags = {
     Name = "igw"
   }
@@ -139,6 +153,7 @@ resource "aws_route_table" "public_subnets" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.gw.id
   }
+
   tags = {
     Name = "rtb-public-subnets"
   }
