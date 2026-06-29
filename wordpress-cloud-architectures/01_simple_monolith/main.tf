@@ -82,13 +82,36 @@ module "wp_web_security_group" {
   }
 }
 
-module "wp-instance-role" {
-  source = "${path.root}/../common_modules/iam/wp-instance-role"
+module "iam_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role"
+  version = "v6.6.1"
+
+  name = "wp-instance-role"
+
+  trust_policy_permissions = {
+    TrustRoleAndServiceToAssume = {
+      actions = [
+        "sts:AssumeRole",
+      ]
+      principals = [{
+        type        = "Service"
+        identifiers = ["ec2.amazonaws.com"]
+      }]
+    }
+  }
+
+  policies = {
+    AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  }
+
+  tags = {
+    Terraform = "true"
+  }
 }
 
 resource "aws_iam_instance_profile" "wp" {
   name = "wp-instance-profile"
-  role = module.wp-instance-role.name
+  role = module.iam_role.name
 }
 
 data "aws_ssm_parameter" "al2023_ami" {
