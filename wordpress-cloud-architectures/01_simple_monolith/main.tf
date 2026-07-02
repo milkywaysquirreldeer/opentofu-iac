@@ -1,51 +1,62 @@
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = {
+      Terraform = "true"
+      Project   = "WordPress"
+    }
+  }
+}
+
+data "aws_availability_zones" "available" {}
+
+locals {
+  azs      = slice(data.aws_availability_zones.available.names, 0, 3)
+  vpc_name = "WP-vpc"
+
+  subnet_labels = {
+    app      = "${local.vpc_name}-app",
+    db       = "${local.vpc_name}-db",
+    public   = "${local.vpc_name}-web",
+    reserved = "${local.vpc_name}-reserved"
+  }
 }
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "v6.6.1"
 
-  name                    = "WP_VPC"
-  azs                     = ["us-west-2a", "us-west-2b", "us-west-2c"]
+  name                    = local.vpc_name
+  azs                     = local.azs
   cidr                    = "10.21.0.0/16"
   map_public_ip_on_launch = true
 
   private_subnets = [
-    "10.21.16.0/20",
-    "10.21.32.0/20",
-    "10.21.48.0/20",
-    "10.21.80.0/20",
-    "10.21.96.0/20",
-    "10.21.112.0/20",
-    "10.21.144.0/20",
-    "10.21.160.0/20",
-    "10.21.176.0/20"
+    "10.21.16.0/20", "10.21.32.0/20", "10.21.48.0/20",
+    "10.21.80.0/20", "10.21.96.0/20", "10.21.112.0/20",
+    "10.21.144.0/20", "10.21.160.0/20", "10.21.176.0/20"
   ]
 
   private_subnet_names = [
-    "WP_VPC-reserved-us-west-2a",
-    "WP_VPC-reserved-us-west-2b",
-    "WP_VPC-reserved-us-west-2c",
-    "WP_VPC-db-us-west-2a",
-    "WP_VPC-db-us-west-2b",
-    "WP_VPC-db-us-west-2c",
-    "WP_VPC-app-us-west-2a",
-    "WP_VPC-app-us-west-2b",
-    "WP_VPC-app-us-west-2c"
+    "${local.subnet_labels.reserved}-${local.azs[0]}",
+    "${local.subnet_labels.reserved}-${local.azs[1]}",
+    "${local.subnet_labels.reserved}-${local.azs[2]}",
+    "${local.subnet_labels.db}-${local.azs[0]}",
+    "${local.subnet_labels.db}-${local.azs[1]}",
+    "${local.subnet_labels.db}-${local.azs[2]}",
+    "${local.subnet_labels.app}-${local.azs[0]}",
+    "${local.subnet_labels.app}-${local.azs[1]}",
+    "${local.subnet_labels.app}-${local.azs[2]}"
   ]
 
   public_subnets = ["10.21.0.0/20", "10.21.64.0/20", "10.21.128.0/20"]
 
   public_subnet_names = [
-    "WP_VPC-web-us-west-2a",
-    "WP_VPC-web-us-west-2b",
-    "WP_VPC-web-us-west-2c"
+    "${local.subnet_labels.public}-${local.azs[0]}",
+    "${local.subnet_labels.public}-${local.azs[1]}",
+    "${local.subnet_labels.public}-${local.azs[2]}"
   ]
-
-  tags = {
-    Terraform = "true"
-  }
 }
 
 module "wp_web_security_group" {
@@ -77,8 +88,7 @@ module "wp_web_security_group" {
   }
 
   tags = {
-    Name      = "WP_WEB"
-    Terraform = "true"
+    Name = "WP_WEB"
   }
 }
 
@@ -102,10 +112,6 @@ module "iam_role" {
 
   policies = {
     AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  }
-
-  tags = {
-    Terraform = "true"
   }
 }
 
@@ -155,7 +161,6 @@ resource "aws_instance" "wp" {
   }
 
   tags = {
-    Name      = "WordPress"
-    Terraform = "true"
+    Name = "WordPress"
   }
 }
