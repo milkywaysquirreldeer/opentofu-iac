@@ -190,7 +190,7 @@ resource "aws_db_instance" "wp" {
   db_name                   = data.aws_ssm_parameter.DBName.value
   db_subnet_group_name      = aws_db_subnet_group.wp.name
   engine                    = "mysql"
-  engine_version            = "8.0"
+  engine_version            = "8.4"
   final_snapshot_identifier = "wordpress-db"
   identifier                = "wordpress-db"
   instance_class            = "db.t3.micro"
