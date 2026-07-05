@@ -11,3 +11,7 @@ This is a basic design with some serious limitations, but it is a quick starting
 ## 2. [Two-tier](./02_two_tier/)
 
 This is an incremental improvement over the monolithic design. The database is migrated off of the monolith and implemented as a separate architectural tier using RDS.
+
+## 3. [With separate dedicated filesystem](./03_with_separate_dedicated_filesystem)
+
+This is another incremental improvement. Here, the media files have been moved off of the compute instance to EFS, providing greatly improved filesystem resilience. Since both the database and the media file system have been separated from the compute, this architecture allows all three parts to be scaled independently of each other.

@@ -27,3 +27,4 @@ This is a two-tier architecture which improves on the original monolithic setup 
 
 1. **[Simple EC2 monolith](../01_simple_monolith/)**
 2. **Two-tier - EC2 and RDS (this)**
+3. **[Using a separate/dedicated file system (EFS)](../03_with_separate_dedicated_filesystem/)**
