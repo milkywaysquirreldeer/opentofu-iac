@@ -255,7 +255,7 @@ module "iam_role" {
   }
 }
 
-resource "aws_iam_instance_profile" "wp" {
+resource "aws_iam_instance_profile" "wp_web" {
   name = "wp-instance-profile"
   role = module.iam_role.name
 }
@@ -265,7 +265,7 @@ data "aws_ssm_parameter" "al2023_ami" {
 }
 
 # Creates EC2 Instance for web server and media)
-resource "aws_launch_template" "wp" {
+resource "aws_launch_template" "wp_web" {
   name                   = "wordpress"
   instance_type          = "t3.nano"
   image_id               = data.aws_ssm_parameter.al2023_ami.insecure_value
@@ -285,7 +285,7 @@ resource "aws_launch_template" "wp" {
   }
 
   iam_instance_profile {
-    name = aws_iam_instance_profile.wp.name
+    name = aws_iam_instance_profile.wp_web.name
   }
 
   metadata_options {
@@ -294,12 +294,12 @@ resource "aws_launch_template" "wp" {
   }
 }
 
-resource "aws_instance" "wp" {
+resource "aws_instance" "wp_web" {
   depends_on = [aws_db_instance.wp, aws_ssm_parameter.efs_dns_name]
   subnet_id  = module.vpc.public_subnets[0]
 
   launch_template {
-    id      = aws_launch_template.wp.id
+    id      = aws_launch_template.wp_web.id
     version = "$Latest"
   }
 
