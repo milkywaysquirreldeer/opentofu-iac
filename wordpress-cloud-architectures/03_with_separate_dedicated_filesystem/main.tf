@@ -270,7 +270,7 @@ resource "aws_launch_template" "wp_web" {
   instance_type          = "t3.nano"
   image_id               = data.aws_ssm_parameter.al2023_ami.insecure_value
   ebs_optimized          = true
-  user_data              = filebase64("${path.root}/user-data/wp-bootstrap.sh")
+  user_data              = filebase64("${path.root}/files/wp-bootstrap.sh")
   update_default_version = true
   vpc_security_group_ids = [module.wp_web_security_group.id]
 
