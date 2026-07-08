@@ -264,7 +264,7 @@ data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
-# Creates EC2 Instance for web server and media)
+# Creates EC2 Instance for web server)
 resource "aws_launch_template" "wp_web" {
   name                   = "wordpress"
   instance_type          = "t3.nano"
