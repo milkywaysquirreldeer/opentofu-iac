@@ -1,5 +1,10 @@
 # WordPress cloud architectures
 
+![Diagram thumbnail 01](./diagrams/thumbnails/wp01.png)
+![Diagram thumbnail 02](./diagrams/thumbnails/wp02.png)
+![Diagram thumbnail 03](./diagrams/thumbnails/wp03.png)
+![Diagram thumbnail 04](./diagrams/thumbnails/wp04.png)
+
 The purpose of this repository is working through the process of breaking a basic, monolithic cloud infrastructure into a much more flexible design. Fully inspired by this project <https://github.com/acantril/learn-cantrill-io-labs/tree/master/aws-elastic-wordpress-evolution>, I thought I'd try my hand at writing the whole thing in OpenTofu/Terraform. Each architecture along the way will be written as its own root TF module.
 
 Note that these designs are somewhat simplified for conceptual focus, so are not intended for production use.
