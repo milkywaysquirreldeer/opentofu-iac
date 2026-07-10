@@ -30,3 +30,4 @@ All of the cons will be addressed as the architecture moves through different ph
 1. **Simple EC2 monolith (this)**
 2. **[Two-tier (EC2 and RDS)](../02_two_tier)**
 3. **[Using a separate/dedicated file system (EFS)](../03_with_separate_dedicated_filesystem/)**
+4. **[Using auto scaling and elastic load balancing](../04_alb_asg/)**

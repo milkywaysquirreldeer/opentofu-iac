@@ -2,7 +2,7 @@
 
 This architecture contains:
 
-- One EC2 instance in a public subnet, running the WordPress web server as well as storing its media files
+- One EC2 instance in a public subnet, running the WordPress web server
 - One RDS instance in a private subnet group, running the WordPress database
 - One shared EFS (an NFS file system) which is both resilient and usable across all of the VPC's Availability Zones
 
@@ -32,3 +32,4 @@ This architecture contains:
 1. **[Simple EC2 monolith](../01_simple_monolith/)**
 2. **[Two-tier - EC2 and RDS](../02_two_tier/)**
 3. **Using a separate/dedicated file system (EFS) (this)**
+4. **[Using auto scaling and elastic load balancing](../04_alb_asg/)**

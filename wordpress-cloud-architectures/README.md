@@ -15,3 +15,7 @@ This is an incremental improvement over the monolithic design. The database is m
 ## 3. [With separate dedicated filesystem](./03_with_separate_dedicated_filesystem)
 
 This is another incremental improvement. Here, the media files have been moved off of the compute instance to EFS, providing greatly improved filesystem resilience. Since both the database and the media file system have been separated from the compute, this architecture allows all three parts to be scaled independently of each other.
+
+## 4. [Using auto scaling and elastic load balancing](../04_alb_asg/)
+
+This final architecture introduces EC2 auto scaling, along with an Application Load Balancer (ALB). This horizontal scaling of the EC2 compute dramatically improves the elasticity and resilience of the public-facing website.
