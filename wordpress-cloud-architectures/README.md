@@ -1,10 +1,5 @@
 # WordPress cloud architectures
 
-![Diagram thumbnail 01](./diagrams/thumbnails/wp01.png)
-![Diagram thumbnail 02](./diagrams/thumbnails/wp02.png)
-![Diagram thumbnail 03](./diagrams/thumbnails/wp03.png)
-![Diagram thumbnail 04](./diagrams/thumbnails/wp04.png)
-
 The purpose of this repository is working through the process of breaking a basic, monolithic cloud infrastructure into a much more flexible design. Fully inspired by this project <https://github.com/acantril/learn-cantrill-io-labs/tree/master/aws-elastic-wordpress-evolution>, I thought I'd try my hand at writing the whole thing in OpenTofu/Terraform. Each architecture along the way will be written as its own root TF module.
 
 Note that these designs are somewhat simplified for conceptual focus, so are not intended for production use.
@@ -13,14 +8,22 @@ Note that these designs are somewhat simplified for conceptual focus, so are not
 
 This is a basic design with some serious limitations, but it is a quick starting point for an organization wanting to run a WordPress-based application on the cloud.
 
+[![Diagram thumbnail 01](./diagrams/thumbnails/wp01.png)](./01_simple_monolith/)
+
 ## 2. [Two-tier](./02_two_tier/)
 
 This is an incremental improvement over the monolithic design. The database is migrated off of the monolith and implemented as a separate architectural tier using RDS.
+
+[![Diagram thumbnail 02](./diagrams/thumbnails/wp02.png)](./02_two_tier/)
 
 ## 3. [With separate dedicated filesystem](./03_with_separate_dedicated_filesystem)
 
 This is another incremental improvement. Here, the media files have been moved off of the compute instance to EFS, providing greatly improved filesystem resilience. Since both the database and the media file system have been separated from the compute, this architecture allows all three parts to be scaled independently of each other.
 
-## 4. [Using auto scaling and elastic load balancing](../04_alb_asg/)
+[![Diagram thumbnail 03](./diagrams/thumbnails/wp03.png)](./03_with_separate_dedicated_filesystem/)
+
+## 4. [Using auto scaling and elastic load balancing](./04_alb_asg/)
 
 This final architecture introduces EC2 auto scaling, along with an Application Load Balancer (ALB). This horizontal scaling of the EC2 compute dramatically improves the elasticity and resilience of the public-facing website.
+
+[![Diagram thumbnail 04](./diagrams/thumbnails/wp04.png)](./04_alb_asg/)
