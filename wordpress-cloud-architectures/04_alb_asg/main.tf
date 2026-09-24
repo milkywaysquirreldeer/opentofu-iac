@@ -1,14 +1,3 @@
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = {
-      Terraform = "true"
-      Project   = "WordPress"
-    }
-  }
-}
-
 data "aws_availability_zones" "available" {}
 
 locals {
