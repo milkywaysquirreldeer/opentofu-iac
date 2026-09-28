@@ -2,50 +2,105 @@ data "aws_availability_zones" "available" {}
 
 locals {
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
-  vpc_name = "WP-vpc"
+  az_count = length(local.azs)
+}
 
-  subnet_labels = {
-    app      = "${local.vpc_name}-app",
-    db       = "${local.vpc_name}-db",
-    public   = "${local.vpc_name}-web",
-    reserved = "${local.vpc_name}-reserved"
+resource "aws_vpc" "wp_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = var.vpc_name
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "v6.6.1"
+resource "aws_internet_gateway" "wp_igw" {
+  vpc_id = aws_vpc.wp_vpc.id
 
-  name                    = local.vpc_name
-  azs                     = local.azs
-  cidr                    = "10.21.0.0/16"
+  tags = {
+    Name = "${var.vpc_name}-igw"
+  }
+}
+
+resource "aws_route_table" "wp_public_rt" {
+  vpc_id = aws_vpc.wp_vpc.id
+
+  tags = {
+    Name = "${var.vpc_name}-public-rt"
+  }
+}
+
+resource "aws_route" "wp_default_route" {
+  route_table_id         = aws_route_table.wp_public_rt.id
+  gateway_id             = aws_internet_gateway.wp_igw.id
+  destination_cidr_block = "0.0.0.0/0"
+}
+
+resource "aws_default_route_table" "wp_default_rtb" {
+  default_route_table_id = aws_vpc.wp_vpc.default_route_table_id
+
+  tags = {
+    Name = "${var.vpc_name}-default-rtb"
+  }
+}
+
+resource "aws_subnet" "wp_public_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, count.index)
   map_public_ip_on_launch = true
 
-  private_subnets = [
-    "10.21.16.0/20", "10.21.32.0/20", "10.21.48.0/20",
-    "10.21.80.0/20", "10.21.96.0/20", "10.21.112.0/20",
-    "10.21.144.0/20", "10.21.160.0/20", "10.21.176.0/20"
-  ]
+  tags = {
+    Name = "${var.vpc_name}-public-subnet-${local.azs[count.index]}"
+  }
+}
 
-  private_subnet_names = [
-    "${local.subnet_labels.reserved}-${local.azs[0]}",
-    "${local.subnet_labels.reserved}-${local.azs[1]}",
-    "${local.subnet_labels.reserved}-${local.azs[2]}",
-    "${local.subnet_labels.db}-${local.azs[0]}",
-    "${local.subnet_labels.db}-${local.azs[1]}",
-    "${local.subnet_labels.db}-${local.azs[2]}",
-    "${local.subnet_labels.app}-${local.azs[0]}",
-    "${local.subnet_labels.app}-${local.azs[1]}",
-    "${local.subnet_labels.app}-${local.azs[2]}"
-  ]
+resource "aws_route_table_association" "wp_public_rta" {
+  count          = local.az_count
+  subnet_id      = aws_subnet.wp_public_subnet[count.index].id
+  route_table_id = aws_route_table.wp_public_rt.id
+}
 
-  public_subnets = ["10.21.0.0/20", "10.21.64.0/20", "10.21.128.0/20"]
+resource "aws_subnet" "wp_app_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, (local.az_count + count.index))
+  map_public_ip_on_launch = false
 
-  public_subnet_names = [
-    "${local.subnet_labels.public}-${local.azs[0]}",
-    "${local.subnet_labels.public}-${local.azs[1]}",
-    "${local.subnet_labels.public}-${local.azs[2]}"
-  ]
+  tags = {
+    Name = "${var.vpc_name}-app-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_subnet" "wp_db_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, ((2 * local.az_count) + count.index))
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.vpc_name}-db-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_subnet" "wp_reserved_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, ((3 * local.az_count) + count.index))
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.vpc_name}-reserved-subnet-${local.azs[count.index]}"
+  }
 }
 
 module "wp_web_security_group" {
@@ -53,7 +108,7 @@ module "wp_web_security_group" {
   version     = "v6.0.0"
   name        = "WP_WEB"
   description = "Allow HTTP from all"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_rules = {
     http-ALL = {
@@ -143,7 +198,7 @@ resource "aws_launch_template" "wp" {
 }
 
 resource "aws_instance" "wp" {
-  subnet_id = module.vpc.public_subnets[0]
+  subnet_id = aws_subnet.wp_public_subnet[0].id
 
   launch_template {
     id = aws_launch_template.wp.id
@@ -153,3 +208,4 @@ resource "aws_instance" "wp" {
     Name = "WordPress"
   }
 }
+
