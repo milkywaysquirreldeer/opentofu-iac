@@ -44,5 +44,4 @@ terraform.rc
 # planout
 
 # Misc
-**/backend.tf
 .devcontainer/
