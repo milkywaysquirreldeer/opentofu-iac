@@ -1,0 +1,63 @@
+name: 'wp01-cd'
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - .gitignore
+      - README.md
+      - LICENSE
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: wordpress-cloud-architectures/01_simple_monolith
+
+env:
+  AWS_REGION: us-west-2
+
+permissions:
+  contents: read
+  # required for OIDC-based access
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  opentofu:
+    name: 'OpenTofu'
+    runs-on: ubuntu-slim
+    environment: wp-env
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: ${{ secrets.OIDC_ROLE_ARN }}
+        role-session-name: GitHub_to_AWS_via_FederatedOIDC
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v2
+
+    - name: Tofu Init
+      run: tofu init
+
+    - name: Tofu Format
+      run: tofu fmt -check
+
+    - name: Tofu Plan
+      run: tofu plan -input=false
+
+    - name: Tofu Apply
+      if: github.event_name == 'push'
+      run: tofu apply -auto-approve -input=false
