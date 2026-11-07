@@ -27,6 +27,16 @@ resource "aws_internet_gateway" "wp_igw" {
   }
 }
 
+resource "aws_eip" "eip" {
+  domain = "vpc"
+
+  tags = {
+    Name = "${aws_vpc.wp_vpc.tags.Name}-eip"
+  }
+
+  depends_on = [aws_internet_gateway.wp_igw]
+}
+
 resource "aws_route_table" "wp_public_rt" {
   vpc_id = aws_vpc.wp_vpc.id
 
@@ -54,7 +64,7 @@ resource "aws_subnet" "wp_public_subnet" {
   vpc_id                  = aws_vpc.wp_vpc.id
   availability_zone       = local.azs[count.index]
   cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, count.index)
-  map_public_ip_on_launch = true
+  map_public_ip_on_launch = false # use eip
 
   tags = {
     Name = "${var.vpc_name}-public-subnet-${local.azs[count.index]}"
@@ -284,5 +294,10 @@ resource "aws_instance" "wp_web" {
   tags = {
     Name = "WordPress"
   }
+}
+
+resource "aws_eip_association" "wp_web" {
+  allocation_id        = aws_eip.eip.id
+  network_interface_id = aws_instance.wp_web.primary_network_interface_id
 }
 
