@@ -2,59 +2,114 @@ data "aws_availability_zones" "available" {}
 
 locals {
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
-  vpc_name = "WP-vpc"
+  az_count = length(local.azs)
+}
 
-  subnet_labels = {
-    app      = "${local.vpc_name}-app",
-    db       = "${local.vpc_name}-db",
-    public   = "${local.vpc_name}-web",
-    reserved = "${local.vpc_name}-reserved"
+resource "aws_vpc" "wp_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = var.vpc_name
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "v6.6.1"
+resource "aws_internet_gateway" "wp_igw" {
+  vpc_id = aws_vpc.wp_vpc.id
 
-  name                    = local.vpc_name
-  azs                     = local.azs
-  cidr                    = "10.21.0.0/16"
-  map_public_ip_on_launch = true
-
-  private_subnets = [
-    "10.21.16.0/20", "10.21.32.0/20", "10.21.48.0/20",
-    "10.21.80.0/20", "10.21.96.0/20", "10.21.112.0/20",
-    "10.21.144.0/20", "10.21.160.0/20", "10.21.176.0/20"
-  ]
-
-  private_subnet_names = [
-    "${local.subnet_labels.reserved}-${local.azs[0]}",
-    "${local.subnet_labels.reserved}-${local.azs[1]}",
-    "${local.subnet_labels.reserved}-${local.azs[2]}",
-    "${local.subnet_labels.db}-${local.azs[0]}",
-    "${local.subnet_labels.db}-${local.azs[1]}",
-    "${local.subnet_labels.db}-${local.azs[2]}",
-    "${local.subnet_labels.app}-${local.azs[0]}",
-    "${local.subnet_labels.app}-${local.azs[1]}",
-    "${local.subnet_labels.app}-${local.azs[2]}"
-  ]
-
-  public_subnets = ["10.21.0.0/20", "10.21.64.0/20", "10.21.128.0/20"]
-
-  public_subnet_names = [
-    "${local.subnet_labels.public}-${local.azs[0]}",
-    "${local.subnet_labels.public}-${local.azs[1]}",
-    "${local.subnet_labels.public}-${local.azs[2]}"
-  ]
+  tags = {
+    Name = "${var.vpc_name}-igw"
+  }
 }
 
-# Queries which subnets are designated as app-tier subnets
-data "aws_subnets" "app_tagged" {
-  depends_on = [module.vpc]
+resource "aws_eip" "eip" {
+  domain = "vpc"
 
-  filter {
-    name   = "tag:Name"
-    values = ["${local.subnet_labels.app}-*"]
+  tags = {
+    Name = "${aws_vpc.wp_vpc.tags.Name}-eip"
+  }
+
+  depends_on = [aws_internet_gateway.wp_igw]
+}
+
+resource "aws_route_table" "wp_public_rt" {
+  vpc_id = aws_vpc.wp_vpc.id
+
+  tags = {
+    Name = "${var.vpc_name}-public-rt"
+  }
+}
+
+resource "aws_route" "wp_default_route" {
+  route_table_id         = aws_route_table.wp_public_rt.id
+  gateway_id             = aws_internet_gateway.wp_igw.id
+  destination_cidr_block = "0.0.0.0/0"
+}
+
+resource "aws_default_route_table" "wp_default_rtb" {
+  default_route_table_id = aws_vpc.wp_vpc.default_route_table_id
+
+  tags = {
+    Name = "${var.vpc_name}-default-rtb"
+  }
+}
+
+resource "aws_subnet" "wp_public_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, count.index)
+  map_public_ip_on_launch = false # use eip
+
+  tags = {
+    Name = "${var.vpc_name}-public-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_route_table_association" "wp_public_rta" {
+  count          = local.az_count
+  subnet_id      = aws_subnet.wp_public_subnet[count.index].id
+  route_table_id = aws_route_table.wp_public_rt.id
+}
+
+resource "aws_subnet" "wp_app_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, (local.az_count + count.index))
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.vpc_name}-app-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_subnet" "wp_db_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, ((2 * local.az_count) + count.index))
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.vpc_name}-db-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_subnet" "wp_reserved_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, ((3 * local.az_count) + count.index))
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.vpc_name}-reserved-subnet-${local.azs[count.index]}"
   }
 }
 
@@ -78,7 +133,7 @@ module "wp_efs_security_group" {
 
   name        = "WP_EFS"
   description = "For WordPress EFS mount targets"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_referenced_security_group_id = {
     WP_WEB = module.wp_web_security_group.id
@@ -106,38 +161,47 @@ resource "aws_ssm_parameter" "efs_dns_name" {
 
 resource "aws_efs_mount_target" "a" {
   file_system_id  = aws_efs_file_system.wp.id
-  subnet_id       = data.aws_subnets.app_tagged.ids[0]
+  subnet_id       = aws_subnet.wp_app_subnet[0].id
   security_groups = [module.wp_efs_security_group.id]
 }
 
 resource "aws_efs_mount_target" "b" {
   file_system_id  = aws_efs_file_system.wp.id
-  subnet_id       = data.aws_subnets.app_tagged.ids[1]
+  subnet_id       = aws_subnet.wp_app_subnet[1].id
   security_groups = [module.wp_efs_security_group.id]
 }
 
 resource "aws_efs_mount_target" "c" {
   file_system_id  = aws_efs_file_system.wp.id
-  subnet_id       = data.aws_subnets.app_tagged.ids[2]
+  subnet_id       = aws_subnet.wp_app_subnet[2].id
   security_groups = [module.wp_efs_security_group.id]
 }
 
 module "wp_db_security_group" {
-  source  = "terraform-aws-modules/security-group/aws//modules/mysql"
-  version = "~> 6.0"
-
+  source      = "terraform-aws-modules/security-group/aws"
+  version     = "v6.0.0"
   name        = "WP_DB"
-  description = "For WordPress MySQL DB"
-  vpc_id      = module.vpc.vpc_id
+  description = "Allow MySQL from WordPress web SG"
+  vpc_id      = aws_vpc.wp_vpc.id
 
-  ingress_referenced_security_group_id = {
-    WP_WEB = module.wp_web_security_group.id
+  ingress_rules = {
+    mysql-WP_WEB = {
+      from_port                    = 3306
+      ip_protocol                  = "tcp"
+      referenced_security_group_id = module.wp_web_security_group.id
+      description                  = "MySQL traffic from WordPress web SG"
+    }
+    all-SG = {
+      ip_protocol                  = "-1"
+      referenced_security_group_id = "self"
+      description                  = "All traffic from members of this SG"
+    }
   }
 
   egress_rules = {
-    "all/WP_WEB" = {
-      ip_protocol                  = "-1"
-      referenced_security_group_id = module.wp_web_security_group.id
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
     }
   }
 
@@ -146,19 +210,9 @@ module "wp_db_security_group" {
   }
 }
 
-# Queries which subnets are designated as database subnets
-data "aws_subnets" "db_tagged" {
-  depends_on = [module.vpc]
-
-  filter {
-    name   = "tag:Name"
-    values = ["${local.subnet_labels.db}-*"]
-  }
-}
-
 resource "aws_db_subnet_group" "wp" {
   name       = "wp-db-subnet-group"
-  subnet_ids = data.aws_subnets.db_tagged.ids
+  subnet_ids = aws_subnet.wp_public_subnet[*].id
 }
 
 data "aws_ssm_parameter" "DBUser" {
@@ -203,7 +257,7 @@ module "wp_web_security_group" {
 
   name        = "WP_WEB"
   description = "For WordPress EC2 instance(s)"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_cidr_ipv4 = {
     ALL = "0.0.0.0/0"
@@ -285,7 +339,7 @@ resource "aws_launch_template" "wp_web" {
 
 resource "aws_instance" "wp_web" {
   depends_on = [aws_db_instance.wp, aws_ssm_parameter.efs_dns_name]
-  subnet_id  = module.vpc.public_subnets[0]
+  subnet_id  = aws_subnet.wp_public_subnet[0].id
 
   launch_template {
     id      = aws_launch_template.wp_web.id
@@ -295,4 +349,9 @@ resource "aws_instance" "wp_web" {
   tags = {
     Name = "WordPress"
   }
+}
+
+resource "aws_eip_association" "wp_web" {
+  allocation_id        = aws_eip.eip.id
+  network_interface_id = aws_instance.wp_web.primary_network_interface_id
 }
