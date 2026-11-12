@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# The AMI selected for this launch template should already have the following loaded:
+# - httpd php8.5 php8.5-mysqlnd mariadb118-server amazon-efs-utils
+# - RDS certificate bundle added to ca-trust (for SSL connectivity to DB)
+# - Wordpress installed and install source still present in /home/ec2/wordpress
+
 DBUser=$(aws ssm get-parameter --name "/A4L/Wordpress/DBUser" \
 --query "Parameter.Value" --output text)
 DBName=$(aws ssm get-parameter --name "/A4L/Wordpress/DBName" \
@@ -11,39 +16,34 @@ DBEndpoint=$(aws ssm get-parameter --name "/A4L/Wordpress/DBEndpoint" \
 EFSFSID=$(aws ssm get-parameter --name "/A4L/Wordpress/EFSFSID" \
 --query "Parameter.Value" --output text)
 
-dnf -y update
+wp_content_dir=/var/www/html/wp-content
 
+# Mount EFS volume
 echo -e "$EFSFSID:/ /var/www/html/wp-content efs _netdev,tls,iam 0 0" >> /etc/fstab
 mount -a -t efs defaults
 
+# Restore default wp-content to new EFS mount if not already present
+if [ ! -d "${wp_content_dir}/themes" || ! -d "${wp_content_dir}/plugins" ]
+then
+  cd /home/ec2-user
+  cp -rvf wordpress/wp-content/* ${wp_content_dir}
+fi
+# Clean up install source
+rm -f latest.tar.gz; rm ./wordpress -rf
+
+# Fix user and file permissions
+chmod 2775 /var/www
+find /var/www -type d -exec chmod 2775 {} \;
+find /var/www -type f -exec chmod 0664 {} \;
+chown -R ec2-user:apache /var/www
+
+usermod -a -G apache ec2-user
+
+# Configure DB connection details in WP
 cd /var/www/html || exit 1
 sed -i "s/'database_name_here'/'${DBName}'/g" wp-config.php
 sed -i "s/'username_here'/'${DBUser}'/g" wp-config.php
 sed -i "s/'password_here'/'${DBPassword}'/g" wp-config.php
 sed -i "s/'localhost'/'${DBEndpoint}'/g" wp-config.php
-rm -f /tmp/db.setup
-
-# Workaround for WordPress hard-coded URLs (in case of any URL changes throughout life of project)
-cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
-#!/usr/bin/env bash
-
-source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
-SQL_COMMAND="mariadb -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
-OLD_URL=$(mariadb -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_name = "siteurl";' | grep http)
-
-ALBDNSNAME=$(aws ssm get-parameter --name "/A4L/Wordpress/ALBDNSNAME" \
---query "Parameter.Value" --output text)
-NEW_URL=$ALBDNSNAME
-#NEW_URL=$(curl -H "X-aws-ec2-metadata-token: $(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")" http://169.254.169.254/latest/meta-data/public-ipv4)
-
-$SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://$NEW_URL') WHERE option_name = 'home' OR option_name = 'siteurl';"
-$SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$NEW_URL');"
-$SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$NEW_URL');"
-$SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$NEW_URL');"
-EOF
-
-chmod 755 /home/ec2-user/update_wp_ip.sh
-echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
-/home/ec2-user/update_wp_ip.sh
 
 systemctl enable --now httpd

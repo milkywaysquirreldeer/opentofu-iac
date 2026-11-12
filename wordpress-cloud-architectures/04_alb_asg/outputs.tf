@@ -13,7 +13,3 @@ output "wp_db_endpoint" {
 output "wp_efs_file_system_id" {
   value = aws_efs_file_system.wp.id
 }
-
-output "wp_efs_file_system_number_of_mount_targets" {
-  value = aws_efs_file_system.wp.number_of_mount_targets
-}

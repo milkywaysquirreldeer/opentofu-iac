@@ -2,48 +2,105 @@ data "aws_availability_zones" "available" {}
 
 locals {
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
-  vpc_name = "WP-vpc"
+  az_count = length(local.azs)
+}
 
-  subnet_labels = {
-    app      = "${local.vpc_name}-app",
-    db       = "${local.vpc_name}-db",
-    public   = "${local.vpc_name}-web",
-    reserved = "${local.vpc_name}-reserved"
+resource "aws_vpc" "wp_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = var.vpc_name
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "v6.6.1"
+resource "aws_internet_gateway" "wp_igw" {
+  vpc_id = aws_vpc.wp_vpc.id
 
-  name                    = local.vpc_name
-  azs                     = local.azs
-  cidr                    = "10.21.0.0/16"
+  tags = {
+    Name = "${var.vpc_name}-igw"
+  }
+}
+
+resource "aws_route_table" "wp_public_rt" {
+  vpc_id = aws_vpc.wp_vpc.id
+
+  tags = {
+    Name = "${var.vpc_name}-public-rt"
+  }
+}
+
+resource "aws_route" "wp_default_route" {
+  route_table_id         = aws_route_table.wp_public_rt.id
+  gateway_id             = aws_internet_gateway.wp_igw.id
+  destination_cidr_block = "0.0.0.0/0"
+}
+
+resource "aws_default_route_table" "wp_default_rtb" {
+  default_route_table_id = aws_vpc.wp_vpc.default_route_table_id
+
+  tags = {
+    Name = "${var.vpc_name}-default-rtb"
+  }
+}
+
+resource "aws_subnet" "wp_public_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, count.index)
   map_public_ip_on_launch = true
 
-  private_subnets = [
-    "10.21.16.0/20", "10.21.32.0/20", "10.21.48.0/20",
-    "10.21.80.0/20", "10.21.96.0/20", "10.21.112.0/20",
-    "10.21.144.0/20", "10.21.160.0/20", "10.21.176.0/20"
-  ]
+  tags = {
+    Name = "${var.vpc_name}-public-subnet-${local.azs[count.index]}"
+  }
+}
 
-  private_subnet_names = [
-    "${local.subnet_labels.reserved}-${local.azs[0]}",
-    "${local.subnet_labels.reserved}-${local.azs[1]}",
-    "${local.subnet_labels.reserved}-${local.azs[2]}",
-    "${local.subnet_labels.db}-${local.azs[0]}",
-    "${local.subnet_labels.db}-${local.azs[1]}",
-    "${local.subnet_labels.db}-${local.azs[2]}",
-    "${local.subnet_labels.app}-${local.azs[0]}",
-    "${local.subnet_labels.app}-${local.azs[1]}",
-    "${local.subnet_labels.app}-${local.azs[2]}"
-  ]
+resource "aws_route_table_association" "wp_public_rta" {
+  count          = local.az_count
+  subnet_id      = aws_subnet.wp_public_subnet[count.index].id
+  route_table_id = aws_route_table.wp_public_rt.id
+}
 
-  public_subnets = ["10.21.0.0/20", "10.21.64.0/20", "10.21.128.0/20"]
+resource "aws_subnet" "wp_app_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, (local.az_count + count.index))
+  map_public_ip_on_launch = false
 
-  public_subnet_names = [
-    for az in local.azs : "${local.subnet_labels.public}-${az}"
-  ]
+  tags = {
+    Name = "${var.vpc_name}-app-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_subnet" "wp_db_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, ((2 * local.az_count) + count.index))
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.vpc_name}-db-subnet-${local.azs[count.index]}"
+  }
+}
+
+resource "aws_subnet" "wp_reserved_subnet" {
+  count                   = local.az_count
+  vpc_id                  = aws_vpc.wp_vpc.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(aws_vpc.wp_vpc.cidr_block, 4, ((3 * local.az_count) + count.index))
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${var.vpc_name}-reserved-subnet-${local.azs[count.index]}"
+  }
 }
 
 resource "aws_efs_file_system" "wp" {
@@ -66,7 +123,7 @@ module "wp_efs_security_group" {
 
   name        = "WP_EFS"
   description = "For WordPress EFS mount targets"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_referenced_security_group_id = {
     WP_WEB = module.wp_web_security_group.id
@@ -84,32 +141,21 @@ module "wp_efs_security_group" {
   }
 }
 
-# Queries which subnets are designated as app-tier subnets (used while defining
-#  EFS mount targets)
-data "aws_subnets" "app_tagged" {
-  depends_on = [module.vpc]
-
-  filter {
-    name   = "tag:Name"
-    values = ["${local.subnet_labels.app}-*"]
-  }
-}
-
 resource "aws_efs_mount_target" "a" {
   file_system_id  = aws_efs_file_system.wp.id
-  subnet_id       = data.aws_subnets.app_tagged.ids[0]
+  subnet_id       = aws_subnet.wp_app_subnet[0].id
   security_groups = [module.wp_efs_security_group.id]
 }
 
 resource "aws_efs_mount_target" "b" {
   file_system_id  = aws_efs_file_system.wp.id
-  subnet_id       = data.aws_subnets.app_tagged.ids[1]
+  subnet_id       = aws_subnet.wp_app_subnet[1].id
   security_groups = [module.wp_efs_security_group.id]
 }
 
 resource "aws_efs_mount_target" "c" {
   file_system_id  = aws_efs_file_system.wp.id
-  subnet_id       = data.aws_subnets.app_tagged.ids[2]
+  subnet_id       = aws_subnet.wp_app_subnet[2].id
   security_groups = [module.wp_efs_security_group.id]
 }
 
@@ -119,7 +165,7 @@ module "wp_db_security_group" {
 
   name        = "WP_DB"
   description = "For WordPress MySQL DB"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_referenced_security_group_id = {
     WP_WEB = module.wp_web_security_group.id
@@ -137,19 +183,9 @@ module "wp_db_security_group" {
   }
 }
 
-# Queries which subnets are designated as database subnets
-data "aws_subnets" "db_tagged" {
-  depends_on = [module.vpc]
-
-  filter {
-    name   = "tag:Name"
-    values = ["${local.subnet_labels.db}-*"]
-  }
-}
-
 resource "aws_db_subnet_group" "wp" {
   name       = "wp-db-subnet-group"
-  subnet_ids = data.aws_subnets.db_tagged.ids
+  subnet_ids = aws_subnet.wp_db_subnet[*].id
 }
 
 data "aws_ssm_parameter" "DBUser" {
@@ -186,7 +222,7 @@ module "wp_web_security_group" {
 
   name        = "WP_WEB"
   description = "For WordPress EC2 instance(s)"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_referenced_security_group_id = {
     WP_ALB = module.wp_alb_security_group.id
@@ -232,11 +268,7 @@ resource "aws_iam_instance_profile" "wp_web" {
   role = module.iam_role.name
 }
 
-data "aws_ssm_parameter" "wp_custom_ami" {
-  name = "/A4L/Wordpress/CustomAMI"
-}
-
-# Current value is read by user data script in launch template
+# Current value is required by user data script in launch template
 resource "aws_ssm_parameter" "efs_dns_name" {
   depends_on = [aws_efs_file_system.wp]
   name       = "/A4L/Wordpress/EFSFSID"
@@ -244,7 +276,7 @@ resource "aws_ssm_parameter" "efs_dns_name" {
   value      = aws_efs_file_system.wp.dns_name
 }
 
-# Current value is read by user data script in launch template
+# Current value is required by user data script in launch template
 resource "aws_ssm_parameter" "DBEndpoint" {
   name      = "/A4L/Wordpress/DBEndpoint"
   type      = "String"
@@ -252,7 +284,7 @@ resource "aws_ssm_parameter" "DBEndpoint" {
   value     = aws_db_instance.wp.address
 }
 
-# Current value is read by user data script in launch template
+# Current value is required by user data script in launch template
 resource "aws_ssm_parameter" "alb_dns_name" {
   name  = "/A4L/Wordpress/ALBDNSNAME"
   type  = "String"
@@ -262,7 +294,7 @@ resource "aws_ssm_parameter" "alb_dns_name" {
 resource "aws_launch_template" "wp_web" {
   name                   = "wordpress"
   instance_type          = "t3.nano"
-  image_id               = data.aws_ssm_parameter.wp_custom_ami.value
+  image_id               = var.wp_web_custom_ami
   ebs_optimized          = true
   user_data              = filebase64("${path.root}/files/wp-bootstrap-custom-ami.sh")
   update_default_version = true
@@ -289,9 +321,17 @@ resource "aws_launch_template" "wp_web" {
 }
 
 resource "aws_autoscaling_group" "wp_web" {
+  depends_on = [
+    data.aws_ssm_parameter.DBUser,
+    data.aws_ssm_parameter.DBPassword,
+    data.aws_ssm_parameter.DBName,
+    aws_ssm_parameter.alb_dns_name,
+    aws_ssm_parameter.DBEndpoint,
+    aws_ssm_parameter.efs_dns_name
+  ]
   name                      = "A4LWORDPRESSASG"
-  max_size                  = 2
-  min_size                  = 0
+  max_size                  = 3
+  min_size                  = 1
   desired_capacity          = 2
   health_check_grace_period = 300
   health_check_type         = "ELB"
@@ -314,7 +354,7 @@ resource "aws_autoscaling_group" "wp_web" {
     value               = "WordPress-ASG"
   }
 
-  vpc_zone_identifier = module.vpc.public_subnets
+  vpc_zone_identifier = aws_subnet.wp_public_subnet[*].id
 }
 
 resource "aws_autoscaling_policy" "high_cpu" {
@@ -322,7 +362,7 @@ resource "aws_autoscaling_policy" "high_cpu" {
   autoscaling_group_name = aws_autoscaling_group.wp_web.name
   scaling_adjustment     = 1
   adjustment_type        = "ChangeInCapacity"
-  cooldown               = 120
+  cooldown               = 600
 }
 
 resource "aws_autoscaling_policy" "low_cpu" {
@@ -330,7 +370,7 @@ resource "aws_autoscaling_policy" "low_cpu" {
   autoscaling_group_name = aws_autoscaling_group.wp_web.name
   scaling_adjustment     = -1
   adjustment_type        = "ChangeInCapacity"
-  cooldown               = 120
+  cooldown               = 600
 }
 
 resource "aws_cloudwatch_metric_alarm" "high_cpu" {
@@ -342,7 +382,7 @@ resource "aws_cloudwatch_metric_alarm" "high_cpu" {
   metric_name         = "CPUUtilization"
   threshold           = "40"
   evaluation_periods  = "2"
-  period              = "120"
+  period              = "300"
   statistic           = "Average"
 
   dimensions = {
@@ -359,7 +399,7 @@ resource "aws_cloudwatch_metric_alarm" "low_cpu" {
   metric_name         = "CPUUtilization"
   threshold           = "40"
   evaluation_periods  = "2"
-  period              = "120"
+  period              = "300"
   statistic           = "Average"
 
   dimensions = {
@@ -371,7 +411,7 @@ resource "aws_lb_target_group" "wp_web" {
   name     = "A4LWORDPRESSALBTG"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = module.vpc.vpc_id
+  vpc_id   = aws_vpc.wp_vpc.id
 
   health_check {
     path = "/"
@@ -389,7 +429,7 @@ module "wp_alb_security_group" {
 
   name        = "WP_ALB"
   description = "For WordPress ALB nodes"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.wp_vpc.id
 
   ingress_cidr_ipv4 = {
     ALL = "0.0.0.0/0"
@@ -410,7 +450,7 @@ module "wp_alb_security_group" {
 resource "aws_lb" "wp_web" {
   name            = "A4LWORDPRESSALB"
   security_groups = [module.wp_alb_security_group.id]
-  subnets         = module.vpc.public_subnets
+  subnets         = aws_subnet.wp_public_subnet[*].id
 }
 
 resource "aws_lb_listener" "wp_web" {
