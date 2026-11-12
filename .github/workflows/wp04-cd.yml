@@ -58,6 +58,7 @@ jobs:
     - name: Tofu Plan
       run: tofu plan -input=false
 
+      # On push to "main", build or change infrastructure according to Terraform configuration files
     - name: Tofu Apply
-      if: github.event_name == 'push'
+      if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
       run: tofu apply -auto-approve -input=false
